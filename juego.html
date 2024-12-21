@@ -1,132 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Space Shooter</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-        }
-        canvas {
-            display: block;
-            margin: auto;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Juego para Móviles con Phaser.js</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      margin: auto;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.55.2/phaser.min.js"></script>
 </head>
 <body>
-    <script>
-        // Configuración del juego
-        const config = {
-            type: Phaser.AUTO,
-            width: 800,
-            height: 600,
-            physics: {
-                default: 'arcade',
-                arcade: {
-                    debug: false
-                }
-            },
-            scene: {
-                preload: preload,
-                create: create,
-                update: update
-            }
-        };
+  <script>
+    // Configuración del juego
+    const config = {
+      type: Phaser.AUTO,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      parent: 'game', // Agregar un contenedor en el HTML (opcional)
+      scene: {
+        preload: preload,
+        create: create,
+        update: update
+      }
+    };
 
-        let player, cursors, bullets, enemies, score = 0, scoreText, lastFired = 0;
+    let player;
+    let fallingObject;
+    let score = 0;
+    let scoreText;
 
-        const game = new Phaser.Game(config);
+    const game = new Phaser.Game(config);
 
-        function preload() {
-            this.load.image('ship', 'https://examples.phaser.io/assets/sprites/space-baddie.png');
-            this.load.image('bullet', 'https://examples.phaser.io/assets/sprites/bullet.png');
-            this.load.image('enemy', 'https://examples.phaser.io/assets/sprites/enemy-bullet.png');
-        }
+    function preload() {
+      // No necesitamos cargar imágenes, solo los objetos geométricos se crean dinámicamente
+    }
 
-        function create() {
-            // Crear el jugador
-            player = this.physics.add.sprite(400, 500, 'ship').setCollideWorldBounds(true);
+    function create() {
+      // Crear el jugador como un círculo
+      player = this.physics.add.circle(config.width / 2, config.height - 50, 30, 0x00ff00); // Círculo verde
+      player.setCollideWorldBounds(true); // Asegura que el jugador no se salga de la pantalla
 
-            // Crear grupo de balas
-            bullets = this.physics.add.group({
-                defaultKey: 'bullet',
-                maxSize: 10
-            });
+      // Crear el objeto que cae como un rectángulo
+      fallingObject = this.physics.add.rectangle(Phaser.Math.Between(0, config.width), 0, 50, 50, 0xff0000); // Rectángulo rojo
+      fallingObject.setVelocity(0, 200); // Velocidad de caída
 
-            // Crear grupo de enemigos
-            enemies = this.physics.add.group();
+      // Crear el texto de puntuación
+      scoreText = this.add.text(16, 16, 'Puntuación: 0', { fontSize: '32px', fill: '#fff' });
 
-            // Generar enemigos periódicamente
-            this.time.addEvent({
-                delay: 1000,
-                callback: spawnEnemy,
-                callbackScope: this,
-                loop: true
-            });
+      // Configurar controles para móviles
+      this.input.on('pointermove', function (pointer) {
+        player.x = pointer.x; // Mueve al jugador con el dedo
+      });
+    }
 
-            // Detectar colisiones entre balas y enemigos
-            this.physics.add.overlap(bullets, enemies, destroyEnemy, null, this);
+    function update() {
+      // Comprobar si el objeto que cae toca al jugador
+      if (Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), fallingObject.getBounds())) {
+        score += 10; // Aumentar la puntuación
+        scoreText.setText('Puntuación: ' + score);
 
-            // Controles
-            cursors = this.input.keyboard.createCursorKeys();
+        // Reiniciar el objeto que cae
+        fallingObject.setX(Phaser.Math.Between(0, config.width));
+        fallingObject.setY(0);
+        fallingObject.setVelocity(0, Phaser.Math.Between(150, 300)); // Nueva velocidad de caída
+      }
 
-            // Puntuación
-            scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '20px', fill: '#fff' });
-        }
+      // Si el objeto sale de la pantalla sin ser atrapado
+      if (fallingObject.y > config.height) {
+        fallingObject.setX(Phaser.Math.Between(0, config.width));
+        fallingObject.setY(0);
+        fallingObject.setVelocity(0, Phaser.Math.Between(150, 300));
+      }
+    }
+  </script>
 
-        function update(time) {
-            // Movimiento del jugador
-            if (cursors.left.isDown) {
-                player.setVelocityX(-300);
-            } else if (cursors.right.isDown) {
-                player.setVelocityX(300);
-            } else {
-                player.setVelocityX(0);
-            }
-
-            // Disparar balas
-            if (cursors.space.isDown && time > lastFired) {
-                const bullet = bullets.get(player.x, player.y - 20);
-                if (bullet) {
-                    bullet.setActive(true).setVisible(true);
-                    bullet.body.velocity.y = -400;
-                    lastFired = time + 200;
-                }
-            }
-
-            // Reciclar balas fuera de la pantalla
-            bullets.children.iterate(bullet => {
-                if (bullet && bullet.y < 0) {
-                    bullets.killAndHide(bullet);
-                }
-            });
-
-            // Movimiento de los enemigos
-            enemies.children.iterate(enemy => {
-                if (enemy && enemy.y > 600) {
-                    enemies.killAndHide(enemy);
-                }
-            });
-        }
-
-        function spawnEnemy() {
-            const x = Phaser.Math.Between(50, 750);
-            const enemy = enemies.create(x, 0, 'enemy');
-            enemy.setVelocityY(100);
-        }
-
-        function destroyEnemy(bullet, enemy) {
-            bullets.killAndHide(bullet);
-            enemies.killAndHide(enemy);
-
-            // Incrementar puntuación
-            score += 10;
-            scoreText.setText('Score: ' + score);
-        }
-    </script>
   <p>para volver</p>
   <a href="contacto.html">volver</a>
 </body>
